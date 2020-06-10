@@ -1,0 +1,13 @@
+[
+    {
+        "ParameterKey": "EnvironmentName",
+        "ParameterValue": "UdacityProject-02"
+    },
+
+    {
+        "ParameterKey": "ProjectName",
+        "ParameterValue": "Project-02-Cloud-DevOps-NDG"
+    }
+
+    
+]

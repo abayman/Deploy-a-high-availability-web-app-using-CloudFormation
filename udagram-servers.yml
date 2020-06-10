@@ -1,0 +1,107 @@
+Description: >
+    Abdelrahman Ayman / ASU / Udacity
+    This template produces the necessary webserver, and loadbalancers
+    in YML formatto deploy a highly available webapp using CloudFormation scripts.
+    Project 02 : Cloud DevOps NDG
+
+Parameters:
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names.
+    Type: String
+    
+  ProjectName:
+    Description: The project name you're working on.
+    Type: String
+
+Resources:
+  WebAppLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          apt-get update -y
+          apt-get install unzip awscli -y
+          apt-get install apache2 -y
+          systemctl start apache2.service
+          cd /var/www/html
+          aws s3 cp s3://udagram-bucket-ndg/index.html
+      ImageId: ami-0d1cd67c26f5fca19
+      KeyName: cloud-devops-lesson-2-key
+      SecurityGroups:
+      - Fn::ImportValue: 
+          !Sub "${ProjectName}-WebSecurityGroupID"
+      InstanceType: t2.medium
+      BlockDeviceMappings:
+      - DeviceName: "/dev/sdk"
+        Ebs:
+          VolumeSize: '10'
+      
+  WebAppGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier: 
+        - Fn::ImportValue: !Sub ${ProjectName}-Private-Subnet-IDs
+      LaunchConfigurationName: !Ref WebAppLaunchConfig
+      MinSize: '2'
+      MaxSize: '6'
+      TargetGroupARNs:
+      - Ref: WebAppTargetGroup
+      Tags:
+        - Key: Name
+          Value: EC2 Instance
+          PropagateAtLaunch: true
+        - Key: ProjectName
+          Value: !Sub ${ProjectName}
+          PropagateAtLaunch: true
+
+  WebAppLB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Subnets:
+      - Fn::ImportValue: !Sub ${ProjectName}-Public-Subnet-1-ID
+      - Fn::ImportValue: !Sub ${ProjectName}-Public-Subnet-2-ID
+      SecurityGroups:
+      - Fn::ImportValue: !Sub ${ProjectName}-LBSecurityGroupID
+      Tags:
+        - Key: Name
+          Value: Load Balancer
+        - Key: ProjectName
+          Value: !Sub ${ProjectName}
+    
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: forward
+        TargetGroupArn: !Ref WebAppTargetGroup
+      LoadBalancerArn: !Ref WebAppLB
+      Port: '80'
+      Protocol: HTTP
+  
+  ALBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+      - Type: forward
+        TargetGroupArn: !Ref WebAppTargetGroup
+      Conditions:
+      - Field: path-pattern
+        Values: [/]
+      ListenerArn: !Ref Listener
+      Priority: 1
+
+  WebAppTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 8
+      HealthyThresholdCount: 2
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 5
+      VpcId:
+        Fn::ImportValue:
+          Fn::Sub: "${ProjectName}-VPCID"
